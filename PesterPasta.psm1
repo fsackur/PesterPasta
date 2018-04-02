@@ -41,9 +41,6 @@ function Trace-RestMethod
         [string]$UriFilter = '.*',
 
         [Parameter(ParameterSetName = 'On')]
-        [psmoduleinfo]$IncludeEntryPointFromModule,
-
-        [Parameter(ParameterSetName = 'On')]
         [switch]$On,
 
         [Parameter(ParameterSetName = 'On')]
@@ -67,7 +64,9 @@ function Trace-RestMethod
         if (Test-Path $FunctionPath)
         {
             Remove-Item $FunctionPath -Force
-        }    
+        }
+
+        Write-Verbose "RestMethod tracing off" -Verbose
         return
     }
 
@@ -227,5 +226,5 @@ function Trace-RestMethod
     #This embeds the values of $TraceFile and $UriFilter into the scriptblock
     $Closure = $FunctionDef.GetNewClosure()
     Set-Item Function:Global:$(Split-Path $FunctionPath -Leaf) $Closure
-    Write-Debug "Tracing enabled" -Debug
+    Write-Verbose "RestMethod tracing on" -Verbose
 }
