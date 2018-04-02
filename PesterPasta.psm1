@@ -228,3 +228,76 @@ function Trace-RestMethod
     Set-Item Function:Global:$(Split-Path $FunctionPath -Leaf) $Closure
     Write-Verbose "RestMethod tracing on" -Verbose
 }
+
+
+function Trace-ModuleCommands
+{
+    [CmdletBinding()]
+    [OutputType([void])]
+
+    param (
+        [Parameter(Position = 0, Mandatory=$True)]
+        [string]$Module,
+
+        [Parameter(Position = 1, Mandatory = $true)]
+        [string]$TraceFile
+    )
+
+    #requires -module Indented.StubCommand
+
+    [psmoduleinfo]$Module = Get-Module $Module
+    $ProxyModuleName = "$Module`TracingProxy"
+    Remove-Module $ProxyModuleName -ErrorAction SilentlyContinue
+
+    $BasePath = Split-Path $TraceFile
+    if ([string]::IsNullOrWhiteSpace($BasePath)) {$BasePath = $PWD}
+    $BasePath = Resolve-Path $BasePath
+    if (-not (Test-Path $BasePath))
+    {
+        New-Item $BasePath -ItemType Directory -Force -ErrorAction Stop -Confirm:$Confirm
+    }
+    $TraceFile = Join-Path $BasePath (Split-Path $TraceFile -Leaf)
+
+
+    $ExportedCommands = $Module.ExportedFunctions
+    $StubDef = New-Object System.Text.StringBuilder (10000 * $ExportedCommands.Count)
+    #Inject the variables
+    $null = $StubDef.AppendLine("`$Script:Tracefile = '$TraceFile'")
+    $null = $StubDef.AppendLine("`$ProxiedModule = '$Module'")
+
+
+    #Injected into each proxy command
+    $FunctionBody = {
+
+        $CommandName = $MyInvocation.MyCommand.Name
+
+        $In = @{
+            "InvocationInfo" = @{
+                $CommandName = $PSBoundParameters
+            }
+        }
+        $In | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
+
+        $InvocationResult = & $ProxiedModule\$CommandName @PSBoundParameters
+
+        $Out = @{"Output" = $InvocationResult}
+        $Out | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
+
+    }
+
+
+    foreach ($Command in $ExportedCommands.Values)
+    {
+        $null = $StubDef.AppendLine(
+            (New-StubCommand $Command -FunctionBody $FunctionBody)
+        )
+    }
+
+    $ModuleDef = [scriptblock]::Create($StubDef.ToString())
+    New-Module -ScriptBlock $ModuleDef -Name $ProxyModuleName |
+        Import-Module -Force -Scope Global
+
+    Get-Command -Module $ProxyModuleName |
+        select -ExpandProperty Name |
+        foreach {Write-Verbose "Tracing command $_"}
+}
