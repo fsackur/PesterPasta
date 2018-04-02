@@ -243,7 +243,7 @@ $FunctionDef = {
         Remove-Variable __NESTEDTRACERESTMETHOD -Scope Global
         Remove-Variable __NESTEDTRACERESTMETHOD_TRACEOBJECT -Scope Global
 
-        return $ModuleReturn
+        return $TraceObject.ApiOutput
     }
     
     $TraceObject = New-Object psobject -Property $TraceProperties
