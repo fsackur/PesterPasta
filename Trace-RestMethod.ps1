@@ -51,6 +51,8 @@ param (
     [switch]$Off
 )
 
+#requires -version 3.0
+
 $FunctionPath = "Function:\Invoke-RestMethod"
 
 if ($PSCmdlet.ParameterSetName -eq 'Off')
@@ -168,17 +170,8 @@ $FunctionDef = {
     {
         return Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
     }
-
     Write-Information "$Uri matches $UriFilter. Tracing REST method to file $TraceFile"
 
-    if ($Body.GetType().IsPrimitive -or $Body -is [string])
-    {
-        $Input = $Body
-    }
-    else
-    {
-        $Input = ConvertTo-Json $Body -Depth 10
-    }
 
     if (-not $TraceFile) {throw "Closure not created properly"}
     $BasePath = Split-Path $TraceFile
@@ -188,23 +181,33 @@ $FunctionDef = {
     }
     if (-not (Test-Path $TraceFile)) {$null | Out-File $TraceFile -Encoding utf8}
 
-
-    "{" + [System.Environment]::NewLine + '"input": ' | 
-                    Out-File $TraceFile -Append utf8 -NoNewline
-    $Input |        Out-File $TraceFile -Append utf8
-
-    #Run the real query
-    $Output = Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
-
-    "," + [System.Environment]::NewLine + '"output": ' |
-                    Out-File $TraceFile -Append utf8 -NoNewline
     
-    $Output | ConvertTo-Json -Depth 10 | 
-                    Out-File $TraceFile -Append utf8
-    
-    "}" |           Out-File $TraceFile -Append utf8
+    $TraceProperties = [ordered]@{
+        ApiInput = $null
+        ApiOutput = $null
+        ApiException = $null        
+    }
+    $TraceObject = New-Object psobject -Property $TraceProperties
+
+    $TraceObject.ApiInput = $PSBoundParameters
+
+    try 
+    {
+        #Run the real query
+        $Output = Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
+    }
+    catch
+    {
+        $TraceObject.ApiException = $_.Exception
+        throw
+    }
+    finally
+    {
+        $TraceObject.ApiOutput = $Output  #presumably, null
+    }
 
 
+    $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
     return $Output
 }
 
