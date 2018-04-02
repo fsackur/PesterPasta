@@ -195,11 +195,14 @@ $FunctionDef = {
         ApiException = $null        
     }
 
-    if ($IncludeEntryPointFromModule)
+    if ($IncludeEntryPointFromModule -and -not $Global:__NESTEDTRACERESTMETHOD)
     {
+        $Global:__NESTEDTRACERESTMETHOD = $true
+
         $TraceProperties = (
             [ordered]@{ModuleInvocation = $null} +
-            $TraceProperties
+            $TraceProperties +
+            [ordered]@{ModuleReturn = $null}
         )
 
         $CallStack = Get-PSCallStack
@@ -210,10 +213,25 @@ $FunctionDef = {
             where {$_.MyCommand.Module.ModuleBase -eq $IncludeEntryPointFromModule.ModuleBase} |
             select -First 1
         
+        $NestedCommand = $EntryInvocation.MyCommand
         #Include bound parameters but not default values - for that, you need to use ASTs
-        $TraceProperties.ModuleInvocation = @{
+        $NestedSplat = $EntryInvocation.BoundParameters
+        $ModuleReturn = & $NestedCommand @NestedSplat
+
+        $TraceObject = New-Object psobject -Property $TraceProperties
+        $TraceObject.ModuleInvocation = @{
             $EntryInvocation.MyCommand.Name = $EntryInvocation.BoundParameters
         }
+        $TraceObject.ApiInput = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiInput
+        $TraceObject.ApiOutput = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiOutput
+        $TraceObject.ApiException = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiException
+        $TraceObject.ModuleReturn = $ModuleReturn
+        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
+
+        Remove-Variable __NESTEDTRACERESTMETHOD -Scope Global
+        Remove-Variable __NESTEDTRACERESTMETHOD_TRACEOBJECT -Scope Global
+
+        return $ModuleReturn
     }
     
     $TraceObject = New-Object psobject -Property $TraceProperties
@@ -236,7 +254,14 @@ $FunctionDef = {
     }
 
 
-    $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
+    if ($Global:__NESTEDTRACERESTMETHOD)
+    {
+        $Global:__NESTEDTRACERESTMETHOD_TRACEOBJECT = $TraceObject
+    }
+    else
+    {
+        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
+    }
     return $Output
 }
 
