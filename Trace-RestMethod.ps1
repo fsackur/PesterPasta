@@ -22,7 +22,7 @@
     in the specified module.
 
     .PARAMETER Off
-    Stops tracing
+    Stops tracing and properly terminates the trace file so that it is valid json.
 
     .EXAMPLE
     Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
@@ -64,10 +64,15 @@ $FunctionPath = "Function:\Invoke-RestMethod"
 
 if ($PSCmdlet.ParameterSetName -eq 'Off')
 {
+    $TraceFile = (Get-Command Invoke-RestMethod -CommandType Function).Module.SessionState.PSVariable.GetValue('TraceFile')
+    if (Test-Path $TraceFile)
+    {
+        ']' | Out-File $TraceFile -Encoding utf8 -Append
+    }
     if (Test-Path $FunctionPath)
     {
         Remove-Item $FunctionPath -Force
-    }
+    }    
     return
 }
 
@@ -186,7 +191,14 @@ $FunctionDef = {
     {
         New-Item $BasePath -ItemType Directory -Force -ErrorAction Stop -Confirm:$Confirm
     }
-    if (-not (Test-Path $TraceFile)) {$null | Out-File $TraceFile -Encoding utf8}
+    if (-not (Test-Path $TraceFile))
+    {
+        '[' | Out-File $TraceFile -Encoding utf8
+    }
+    elseif (-not $Global:__NESTEDTRACERESTMETHOD)
+    {
+        ',' | Out-File $TraceFile -Encoding utf8 -Append
+    }
 
     
     $TraceProperties = [ordered]@{
@@ -226,7 +238,7 @@ $FunctionDef = {
         $TraceObject.ApiOutput = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiOutput
         $TraceObject.ApiException = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiException
         $TraceObject.ModuleReturn = $ModuleReturn
-        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
+        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
 
         Remove-Variable __NESTEDTRACERESTMETHOD -Scope Global
         Remove-Variable __NESTEDTRACERESTMETHOD_TRACEOBJECT -Scope Global
@@ -260,7 +272,7 @@ $FunctionDef = {
     }
     else
     {
-        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8
+        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
     }
     return $Output
 }
