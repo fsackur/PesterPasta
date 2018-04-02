@@ -17,6 +17,10 @@
     .PARAMETER UriFilter
     String which will be used for regex match on the URI of any API calls. Only URIs matching the filter will be traced.
 
+    .PARAMETER IncludeEntryPointFromModule
+    As well as input and output from REST method, specifies to also walk the stack and trace the original command called 
+    in the specified module.
+
     .PARAMETER Off
     Stops tracing
 
@@ -40,6 +44,9 @@ param (
 
     [Parameter(ParameterSetName = 'On')]
     [string]$UriFilter = '.*',
+
+    [Parameter(ParameterSetName = 'On')]
+    [psmoduleinfo]$IncludeEntryPointFromModule,
 
     [Parameter(ParameterSetName = 'On')]
     [switch]$On,
@@ -187,6 +194,28 @@ $FunctionDef = {
         ApiOutput = $null
         ApiException = $null        
     }
+
+    if ($IncludeEntryPointFromModule)
+    {
+        $TraceProperties = (
+            [ordered]@{ModuleInvocation = $null} +
+            $TraceProperties
+        )
+
+        $CallStack = Get-PSCallStack
+        [Array]::Reverse($CallStack)
+        
+        $EntryInvocation = $CallStack |
+            select -ExpandProperty InvocationInfo |
+            where {$_.MyCommand.Module.ModuleBase -eq $IncludeEntryPointFromModule.ModuleBase} |
+            select -First 1
+        
+        #Include bound parameters but not default values - for that, you need to use ASTs
+        $TraceProperties.ModuleInvocation = @{
+            $EntryInvocation.MyCommand.Name = $EntryInvocation.BoundParameters
+        }
+    }
+    
     $TraceObject = New-Object psobject -Property $TraceProperties
 
     $TraceObject.ApiInput = $PSBoundParameters
