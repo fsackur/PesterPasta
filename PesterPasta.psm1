@@ -2,7 +2,7 @@
 function Trace-RestMethod
 {
     <#
-    .Synopsis
+    .SYNOPSIS
     Capture input and output of Invoke-RestMethod to a trace file
 
     .DESCRIPTION
@@ -230,24 +230,69 @@ function Trace-RestMethod
 }
 
 
-function Trace-ModuleCommands
+function Trace-SutCommand
 {
-    [CmdletBinding()]
+    <#
+    .SYNOPSIS
+    Capture input and output of a command to file
+
+    .DESCRIPTION
+    "SUT" is an abbreviation for "system under test". This command assists with black-box testing by letting the user
+    capture output for a given input. This speeds the development of a collection of tests for an existing system.
+
+    Proxy commands are generated for each command being traced, and can be seen in the module table with the name
+    'PastaTracingProxy'. THe proxy commands clobber the commands being traced. Removing this module disables tracing 
+    and exposes the original commands again.
+    
+    .PARAMETER Tracefile
+    The file to save captured data in JSON format
+
+    .PARAMETER Module
+    A powershell module to trace. All exported functions will be traced.
+
+    .PARAMETER Command
+    A list of commands to trace.
+    #>
+    [CmdletBinding(DefaultParameterSetName = "ByModule")]
     [OutputType([void])]
 
     param (
-        [Parameter(Position = 0, Mandatory=$True)]
+        [Parameter(ParameterSetName = "ByModule", Position = 0, Mandatory = $true)]
         [string]$Module,
 
-        [Parameter(Position = 1, Mandatory = $true)]
-        [string]$TraceFile
+        [Parameter(ParameterSetName = "ByCommand", Position = 0, Mandatory = $true)]
+        [string[]]$Command,
+
+        [Parameter(ParameterSetName = "ByModule", Position = 1, Mandatory = $true)]
+        [Parameter(ParameterSetName = "ByCommand", Position = 1, Mandatory = $true)]
+        [string]$TraceFile,
+
+        [Parameter(ParameterSetName = 'Off', Mandatory = $true)]
+        [switch]$Off
     )
 
-    #requires -module Indented.StubCommand
-
-    [psmoduleinfo]$Module = Get-Module $Module
-    $ProxyModuleName = "$Module`TracingProxy"
+    $ProxyModuleName = "PastaTracingProxy"
     Remove-Module $ProxyModuleName -ErrorAction SilentlyContinue
+
+    switch ($PSCmdlet.ParameterSetName) {
+    'ByModule'
+        {
+            [psmoduleinfo]$Module = Get-Module $Module
+            [System.Management.Automation.CommandInfo[]]$Commands = $Module.ExportedCommands.Values | 
+                foreach {$_}
+        }
+        'ByCommand'
+        {
+            [System.Management.Automation.CommandInfo[]]$Commands = Get-Command $Command
+        }
+        default
+        {
+            Write-Verbose "SutCommand tracing off" -Verbose
+            return
+        }
+    }
+
+    #requires -module Indented.StubCommand
 
     $BasePath = Split-Path $TraceFile
     if ([string]::IsNullOrWhiteSpace($BasePath)) {$BasePath = $PWD}
@@ -259,45 +304,71 @@ function Trace-ModuleCommands
     $TraceFile = Join-Path $BasePath (Split-Path $TraceFile -Leaf)
 
 
-    $ExportedCommands = $Module.ExportedFunctions
-    $StubDef = New-Object System.Text.StringBuilder (10000 * $ExportedCommands.Count)
-    #Inject the variables
-    $null = $StubDef.AppendLine("`$Script:Tracefile = '$TraceFile'")
-    $null = $StubDef.AppendLine("`$ProxiedModule = '$Module'")
+    $ClobberedModulePaths = New-Object System.Collections.ArrayList
 
-
+    
     #Injected into each proxy command
     $FunctionBody = {
 
-        $CommandName = $MyInvocation.MyCommand.Name
-
         $In = @{
             "InvocationInfo" = @{
-                $CommandName = $PSBoundParameters
+                "$ProxiedCommandName" = $PSBoundParameters
             }
         }
         $In | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
 
-        $InvocationResult = & $ProxiedModule\$CommandName @PSBoundParameters
+        $InvocationResult = & $ProxiedCommandModule\$ProxiedCommandName @PSBoundParameters
 
         $Out = @{"Output" = $InvocationResult}
         $Out | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
 
+        return $InvocationResult
     }
 
 
-    foreach ($Command in $ExportedCommands.Values)
+    #Stitch together a dynamic module definition
+    $StubDef = New-Object System.Text.StringBuilder (10000 * $Commands.Count)
+    foreach ($ProxiedCommand in $Commands)
     {
+        $FunctionBody = [scriptblock]::Create((
+            $FunctionBody.ToString() `
+                -replace '\$ProxiedCommandModule', $ProxiedCommand.ModuleName `
+                -replace '\$ProxiedCommandName', $ProxiedCommand.Name
+        ))
+
         $null = $StubDef.AppendLine(
-            (New-StubCommand $Command -FunctionBody $FunctionBody)
+            (New-StubCommand -CommandInfo $ProxiedCommand -FunctionBody $FunctionBody)
         )
+
+        $null = $ClobberedModulePaths.Add($ProxiedCommand.Module.ModuleBase)
     }
-
     $ModuleDef = [scriptblock]::Create($StubDef.ToString())
-    New-Module -ScriptBlock $ModuleDef -Name $ProxyModuleName |
-        Import-Module -Force -Scope Global
 
-    Get-Command -Module $ProxyModuleName |
-        select -ExpandProperty Name |
+
+    #Import dynamic module
+    $ProxyModule = New-Module -ScriptBlock $ModuleDef -Name $ProxyModuleName |
+        Import-Module -PassThru -Force -Scope Global -ErrorAction Stop
+
+    
+    #Inject variable
+    $ProxyModule.SessionState.PSVariable.Set('Tracefile', $Tracefile)
+
+    
+    #Cleanup - bring back the commands we masked on module unload
+    $ClobberedModulePaths = $ClobberedModulePaths | select -Unique
+    $ExportedCommandNames = $ProxyModule.ExportedCommands.Keys | foreach {$_}
+    $ProxyModule.OnRemove = {Import-Module $ClobberedModulePaths -Scope Global}.GetNewClosure()
+
+
+    #User feedback
+    $Commands | where {$_.Name -notin $ExportedCommandNames} |
+        foreach {Write-Warning "Not tracing command $_"}
+    
+    $ExportedCommandNames |
         foreach {Write-Verbose "Tracing command $_"}
+    
+    if ($ExportedCommandNames) {
+        Write-Verbose "SutCommand tracing on" -Verbose
+    }
+    
 }
