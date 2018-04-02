@@ -22,6 +22,9 @@
 
     .EXAMPLE
     Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
+    Invoke-MyApiCall -Parameter1 $P1
+    Invoke-MyApiCall -Parameter1 $P1
+    Trace-RestMethod.ps1 -Off
 
     Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json.
 
