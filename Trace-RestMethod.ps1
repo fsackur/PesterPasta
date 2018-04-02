@@ -17,22 +17,13 @@
     .PARAMETER UriFilter
     String which will be used for regex match on the URI of any API calls. Only URIs matching the filter will be traced.
 
-    .PARAMETER IncludeEntryPointFromModule
-    As well as input and output from REST method, specifies to also walk the stack and trace the original command called 
-    in the specified module.
-
     .PARAMETER Off
     Stops tracing and properly terminates the trace file so that it is valid json.
 
     .EXAMPLE
     Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
 
-    Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json
-
-    .EXAMPLE
-    Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
-
-    Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json
+    Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json.
 
 #>
 
@@ -195,7 +186,7 @@ $FunctionDef = {
     {
         '[' | Out-File $TraceFile -Encoding utf8
     }
-    elseif (-not $Global:__NESTEDTRACERESTMETHOD)
+    else
     {
         ',' | Out-File $TraceFile -Encoding utf8 -Append
     }
@@ -206,46 +197,6 @@ $FunctionDef = {
         ApiOutput = $null
         ApiException = $null        
     }
-
-    if ($IncludeEntryPointFromModule -and -not $Global:__NESTEDTRACERESTMETHOD)
-    {
-        $Global:__NESTEDTRACERESTMETHOD = $true
-
-        $TraceProperties = (
-            [ordered]@{ModuleInvocation = $null} +
-            $TraceProperties +
-            [ordered]@{ModuleReturn = $null}
-        )
-
-        $CallStack = Get-PSCallStack
-        [Array]::Reverse($CallStack)
-        
-        $EntryInvocation = $CallStack |
-            select -ExpandProperty InvocationInfo |
-            where {$_.MyCommand.Module.ModuleBase -eq $IncludeEntryPointFromModule.ModuleBase} |
-            select -First 1
-        
-        $NestedCommand = $EntryInvocation.MyCommand
-        #Include bound parameters but not default values - for that, you need to use ASTs
-        $NestedSplat = $EntryInvocation.BoundParameters
-        $ModuleReturn = & $NestedCommand @NestedSplat
-
-        $TraceObject = New-Object psobject -Property $TraceProperties
-        $TraceObject.ModuleInvocation = @{
-            $EntryInvocation.MyCommand.Name = $EntryInvocation.BoundParameters
-        }
-        $TraceObject.ApiInput = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiInput
-        $TraceObject.ApiOutput = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiOutput
-        $TraceObject.ApiException = $__NESTEDTRACERESTMETHOD_TRACEOBJECT.ApiException
-        $TraceObject.ModuleReturn = $ModuleReturn
-        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
-
-        Remove-Variable __NESTEDTRACERESTMETHOD -Scope Global
-        Remove-Variable __NESTEDTRACERESTMETHOD_TRACEOBJECT -Scope Global
-
-        return $TraceObject.ApiOutput
-    }
-    
     $TraceObject = New-Object psobject -Property $TraceProperties
 
     $TraceObject.ApiInput = $PSBoundParameters
@@ -265,15 +216,8 @@ $FunctionDef = {
         $TraceObject.ApiOutput = $Output  #presumably, null
     }
 
-
-    if ($Global:__NESTEDTRACERESTMETHOD)
-    {
-        $Global:__NESTEDTRACERESTMETHOD_TRACEOBJECT = $TraceObject
-    }
-    else
-    {
-        $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
-    }
+    $TraceObject | ConvertTo-Json -Depth 10 | Out-File $TraceFile -Encoding utf8 -Append
+    
     return $Output
 }
 
