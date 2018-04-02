@@ -4,21 +4,50 @@
     .Synopsis
     Capture input and output of Invoke-RestMethod to a trace file
 
+    .DESCRIPTION
+    When writing unit tests for API clients, it is very useful to pull real data that can be used for mocking. This
+    function helps generate mock data. Simply run all the commands that you wish to write tests for and mock data is 
+    traced in JSON format.
+
+    This captures the input to the -Body parameter of, and the return from, Invoke-RestMethod.
+
+    .PARAMETER Tracefile
+    The file to save mock data in JSON format
+
+    .PARAMETER UriFilter
+    String which will be used for regex match on the URI of any API calls. Only URIs matching the filter will be traced.
+
+    .PARAMETER Off
+    Stops tracing
+
+    .EXAMPLE
+    Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
+
+    Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json
+
+    .EXAMPLE
+    Trace-RestMethod.ps1 .\RestMethodTrace.json -UriFilter 'https://api.service.com/api/v2'
+
+    Captures inputs and outputs of REST method calls to api.service.com to file RestMethodTrace.json
+
 #>
 
-[CmdletBinding(DefaultParameterSetName='On', SupportsShouldProcess = $true, ConfirmImpact = 'High')]
+[CmdletBinding(DefaultParameterSetName = 'On', SupportsShouldProcess = $true, ConfirmImpact = 'High')]
 [OutputType([void])]
 param (
-    [Parameter(ParameterSetName='On', Position=0, Mandatory=$true)]
+    [Parameter(ParameterSetName = 'On', Position = 0, Mandatory = $true)]
     [string]$TraceFile,
 
-    [Parameter(ParameterSetName='On')]
+    [Parameter(ParameterSetName = 'On')]
+    [string]$UriFilter = '.*',
+
+    [Parameter(ParameterSetName = 'On')]
     [switch]$On,
 
-    [Parameter(ParameterSetName='On')]
+    [Parameter(ParameterSetName = 'On')]
     [switch]$Force,
 
-    [Parameter(ParameterSetName='Off', Mandatory=$true)]
+    [Parameter(ParameterSetName = 'Off', Mandatory = $true)]
     [switch]$Off
 )
 
@@ -34,22 +63,23 @@ if ($PSCmdlet.ParameterSetName -eq 'Off')
 }
 
 $BasePath = Split-Path $TraceFile
+if ([string]::IsNullOrWhiteSpace($BasePath)) {$BasePath = $PWD}
+$BasePath = Resolve-Path $BasePath
 if (-not (Test-Path $BasePath))
 {
-    #if ($PSCmdlet.ShouldProcess($BasePath))
-    #{
-        New-Item $BasePath -ItemType Directory -Force -ErrorAction Stop -Confirm:$Confirm
-    #}
+    New-Item $BasePath -ItemType Directory -Force -ErrorAction Stop -Confirm:$Confirm
 }
+$TraceFile = Join-Path $BasePath (Split-Path $TraceFile -Leaf)
 
 
+#Generated with Metaprogramming module
 $FunctionDef = {
-<#
+    <#
 
-.ForwardHelpTargetName Microsoft.PowerShell.Utility\Invoke-RestMethod
-.ForwardHelpCategory Cmdlet
+    .ForwardHelpTargetName Microsoft.PowerShell.Utility\Invoke-RestMethod
+    .ForwardHelpCategory Cmdlet
 
-#>
+    #>
     [CmdletBinding(HelpUri = 'http://go.microsoft.com/fwlink/?LinkID=217034')]
     param(
         [Microsoft.PowerShell.Commands.WebRequestMethod]
@@ -133,13 +163,21 @@ $FunctionDef = {
         ${PassThru}
     )
 
+    if (-not $UriFilter) {throw "Closure not created properly"}
+    if ($Uri -notmatch $UriFilter)
+    {
+        return Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
+    }
+
+    Write-Information "$Uri matches $UriFilter. Tracing REST method to file $TraceFile"
+
     if ($Body.GetType().IsPrimitive -or $Body -is [string])
     {
         $Input = $Body
     }
     else
     {
-        $Input = ConvertTo-Json $Body
+        $Input = ConvertTo-Json $Body -Depth 10
     }
 
     if (-not $TraceFile) {throw "Closure not created properly"}
@@ -150,13 +188,26 @@ $FunctionDef = {
     }
     if (-not (Test-Path $TraceFile)) {$null | Out-File $TraceFile -Encoding utf8}
 
-    $Input | Out-File $TraceFile -Append utf8
-    '=' |  Out-File $TraceFile -Append utf8
-    $Output = Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
-    $Output | Out-File $TraceFile -Append utf8
 
+    "{" + [System.Environment]::NewLine + '"input": ' | 
+                    Out-File $TraceFile -Append utf8 -NoNewline
+    $Input |        Out-File $TraceFile -Append utf8
+
+    #Run the real query
+    $Output = Microsoft.PowerShell.Utility\Invoke-RestMethod @PSBoundParameters
+
+    "," + [System.Environment]::NewLine + '"output": ' |
+                    Out-File $TraceFile -Append utf8 -NoNewline
+    
+    $Output | ConvertTo-Json -Depth 10 | 
+                    Out-File $TraceFile -Append utf8
+    
+    "}" |           Out-File $TraceFile -Append utf8
+
+
+    return $Output
 }
 
-#This embeds the value of $TraceFile into the scriptblock
+#This embeds the values of $TraceFile and $UriFilter into the scriptblock
 $Closure = $FunctionDef.GetNewClosure()
 Set-Item Function:Global:$(Split-Path $FunctionPath -Leaf) $Closure
