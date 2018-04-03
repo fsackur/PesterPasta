@@ -1,4 +1,8 @@
 
+
+Import-Module $PSSCriptRoot\Packages\PSSQLite
+. $PSScriptRoot\Initialize-TraceDB.ps1
+
 function Trace-RestMethod
 {
     <#
