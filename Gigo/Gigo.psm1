@@ -68,7 +68,9 @@ function Get-Trace
         $Query = "SELECT * FROM Traces"
     }
 
-    Invoke-SqliteQuery -Query $Query
+    $Result = Invoke-SqliteQuery -Query $Query
+    @($Result).ForEach({$_.PSTypeNames.Insert(0, 'Dusty.GigoTrace')})
+    return $Result
 }
 
 

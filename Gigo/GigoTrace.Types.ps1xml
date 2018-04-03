@@ -1,0 +1,45 @@
+﻿<Types>
+  <Type>
+    <Name>Dusty.GigoTrace</Name>
+    <Members>
+
+      <ScriptProperty>
+        <Name>State</Name>
+        <GetScriptBlock>
+          if (-not $this.StartTime) {"BeforeOpen"}
+          elseif (-not $this.EndTime) {"Open"}
+          else {"Closed"}
+        </GetScriptBlock>
+      </ScriptProperty>
+
+      <ScriptMethod>
+        <Name>Close</Name>
+        <Script>
+          switch ($this.State) {
+            "Open" {Close-GigoTrace $this.Id}
+            default {throw "Cannot close trace in $_ state"}
+          }
+          $this.EndTime = (Get-GigoTrace $this.Id).EndTime
+        </Script>
+      </ScriptMethod>
+
+      <ScriptMethod>
+        <Name>AddEntry</Name>
+        <Script>
+          switch ($this.State) {
+            "Open" {Add-GigoTraceEntry $this.Id}
+            default {throw "Cannot add trace entries in $_ state"}
+          }
+        </Script>
+      </ScriptMethod>
+
+      <ScriptMethod>
+        <Name>GetEntries</Name>
+        <Script>
+          Get-GigoTraceEntry -TraceId $this.Id
+        </Script>
+      </ScriptMethod>
+
+    </Members>
+  </Type>
+</Types>
