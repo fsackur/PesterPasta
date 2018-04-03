@@ -1,87 +1,12 @@
 
 
-Import-Module $PSSCriptRoot\Packages\PSSQLite
-. $PSScriptRoot\Initialize-TraceDB.ps1
 
+$PackagePath = Join-Path $PSScriptRoot 'Packages'
+$PackagePath | Get-ChildItem | select -ExpandProperty FullName | Import-Module
 
-function Open-Trace
-{
-    [CmdletBinding()]
-    [OutputType([Guid])]
-    param()
-
-    $TraceId = New-Guid
-    $Command = 'Get-Stuff'
-    $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
-    $Date = Get-Date
-
-    Invoke-SqliteQuery -Query "
-        INSERT INTO Traces (Id, Command, BoundParameters, StartTime)
-        VALUES ('$TraceId', '$Command', '$BoundParameters', '$Date')
-    "
-
-    return $TraceId
-}
-
-
-function Close-Trace
-{
-    [CmdletBinding()]
-    [OutputType([void])]
-    param(
-        [Parameter(Mandatory = $true, Position = 0)]
-        [guid]$Id
-    )
-
-    $TraceId = $Id
-    $Date = Get-Date
-
-    Invoke-SqliteQuery -Query "
-        UPDATE Traces
-        SET EndTime = '$Date'
-        WHERE Id = '$TraceId'
-    "
-}
-
-
-function Get-Trace
-{
-    [CmdletBinding(DefaultParameterSetName = 'All')]
-    [OutputType([psobject])]
-    param(
-        [Parameter(ParameterSetName = 'ById', Mandatory = $true, Position = 0)]
-        [guid]$Id
-    )
-
-    $TraceId = $Id
-    $Date = Get-Date
-
-    if ($PSCmdlet.ParameterSetName -eq 'ById')
-    {
-        $Query = "
-            SELECT * FROM Traces
-            WHERE Id = '$TraceId'
-        "
-    }
-    else
-    {
-        $Query = "SELECT * FROM Traces"
-    }
-
-    $Result = Invoke-SqliteQuery -Query $Query
-    @($Result).ForEach({$_.PSTypeNames.Insert(0, 'Dusty.GigoTrace')})
-    return $Result
-}
-
-
-
-
-
-
-
-
-
-
+$FunctionPath = Join-Path $PSScriptRoot 'Functions'
+$FunctionPath | Get-ChildItem | select -ExpandProperty FullName | foreach {. $_}
+#. $PSScriptRoot\Initialize-TraceDB.ps1
 
 
 
