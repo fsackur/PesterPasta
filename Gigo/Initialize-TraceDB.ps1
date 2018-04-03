@@ -24,7 +24,7 @@ $PSDefaultParameterValues.'Get-Date:Format' = 'yyyy-MM-dd HH:mm:ss'
 $Query = "
     CREATE TABLE Traces (
         Id NCHAR(36) PRIMARY KEY, 
-        Function TEXT, 
+        Command NCHAR(54), 
         BoundParameters TEXT, 
         StartTime DATETIME,
         EndTime DATETIME
@@ -38,10 +38,12 @@ if ($null -eq (Invoke-SqliteQuery -Query "PRAGMA table_info(Traces)"))
 
 $Query = "
     CREATE TABLE TraceEntries (
-        Id NCHAR(36) PRIMARY KEY, 
+        Id NCHAR(36) PRIMARY KEY,
         TraceId NCHAR(36),
-        Function TEXT, 
-        BoundParameters TEXT, 
+        Command NCHAR(54),
+        BoundParameters TEXT,
+        Result TEXT,
+        Error TEXT,
         Time DATETIME,
         FOREIGN KEY (TraceId) REFERENCES Traces(Id)
     )"
@@ -53,17 +55,3 @@ if ($null -eq (Invoke-SqliteQuery -Query "PRAGMA table_info(TraceEntries)"))
     throw "Failed to create TraceEntries table"
 }
 
-
-#Test it works
-
-
-Invoke-SqliteQuery -Query "SELECT * FROM Traces"
-
-$EntryId = New-Guid
-Invoke-SqliteQuery -Query "
-    INSERT INTO TraceEntries (Id, TraceId, Function, BoundParameters)
-    VALUES ('$EntryId', '$TraceId', '$Function', '$BoundParameters')
-"
-
-
-Invoke-SqliteQuery -Query "SELECT * FROM TraceEntries"

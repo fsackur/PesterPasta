@@ -11,13 +11,13 @@ function Open-Trace
     param()
 
     $TraceId = New-Guid
-    $Function = 'Get-Stuff'
+    $Command = 'Get-Stuff'
     $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
     $Date = Get-Date
 
     Invoke-SqliteQuery -Query "
-        INSERT INTO Traces (Id, Function, BoundParameters, StartTime)
-        VALUES ('$TraceId', '$Function', '$BoundParameters', '$Date')
+        INSERT INTO Traces (Id, Command, BoundParameters, StartTime)
+        VALUES ('$TraceId', '$Command', '$BoundParameters', '$Date')
     "
 
     return $TraceId
