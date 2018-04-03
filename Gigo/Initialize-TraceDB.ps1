@@ -11,10 +11,6 @@
 
 #requires -module PSSQLite
 
-function New-Id
-{
-    (New-Guid) -replace '-'
-}
 
 
 $Connection = New-SQLiteConnection -DataSource ':MEMORY:'
@@ -23,10 +19,11 @@ if (-not ($Connection.ConnectionString -match 'Data Source=(?<DataSource>.+?);')
     throw "Failed to create SQLite data source"
 }
 $PSDefaultParameterValues.'Invoke-SqliteQuery:SQLiteConnection' = $Connection
+$PSDefaultParameterValues.'Get-Date:Format' = 'yyyy-MM-dd HH:mm:ss'
 
 $Query = "
     CREATE TABLE Traces (
-        Id NCHAR(32) PRIMARY KEY, 
+        Id NCHAR(36) PRIMARY KEY, 
         Function TEXT, 
         BoundParameters TEXT, 
         StartTime DATETIME,
@@ -41,8 +38,8 @@ if ($null -eq (Invoke-SqliteQuery -Query "PRAGMA table_info(Traces)"))
 
 $Query = "
     CREATE TABLE TraceEntries (
-        Id NCHAR(32) PRIMARY KEY, 
-        TraceId NCHAR(32),
+        Id NCHAR(36) PRIMARY KEY, 
+        TraceId NCHAR(36),
         Function TEXT, 
         BoundParameters TEXT, 
         Time DATETIME,
@@ -58,18 +55,11 @@ if ($null -eq (Invoke-SqliteQuery -Query "PRAGMA table_info(TraceEntries)"))
 
 
 #Test it works
-$TraceId = New-Id
-$Function = 'Get-Stuff'
-$BoundParameters = @{Stuff=22} | ConvertTo-Json -Depth 3 -Compress
 
-Invoke-SqliteQuery -Query "
-    INSERT INTO Traces (Id, Function, BoundParameters)
-    VALUES ('$TraceId', '$Function', '$BoundParameters')
-"
 
 Invoke-SqliteQuery -Query "SELECT * FROM Traces"
 
-$EntryId = New-Id
+$EntryId = New-Guid
 Invoke-SqliteQuery -Query "
     INSERT INTO TraceEntries (Id, TraceId, Function, BoundParameters)
     VALUES ('$EntryId', '$TraceId', '$Function', '$BoundParameters')

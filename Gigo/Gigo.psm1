@@ -3,6 +3,91 @@
 Import-Module $PSSCriptRoot\Packages\PSSQLite
 . $PSScriptRoot\Initialize-TraceDB.ps1
 
+
+function Open-Trace
+{
+    [CmdletBinding()]
+    [OutputType([Guid])]
+    param()
+
+    $TraceId = New-Guid
+    $Function = 'Get-Stuff'
+    $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
+    $Date = Get-Date
+
+    Invoke-SqliteQuery -Query "
+        INSERT INTO Traces (Id, Function, BoundParameters, StartTime)
+        VALUES ('$TraceId', '$Function', '$BoundParameters', '$Date')
+    "
+
+    return $TraceId
+}
+
+
+function Close-Trace
+{
+    [CmdletBinding()]
+    [OutputType([void])]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [guid]$Id
+    )
+
+    $TraceId = $Id
+    $Date = Get-Date
+
+    Invoke-SqliteQuery -Query "
+        UPDATE Traces
+        SET EndTime = '$Date'
+        WHERE Id = '$TraceId'
+    "
+}
+
+
+function Get-Trace
+{
+    [CmdletBinding(DefaultParameterSetName = 'All')]
+    [OutputType([psobject])]
+    param(
+        [Parameter(ParameterSetName = 'ById', Mandatory = $true, Position = 0)]
+        [guid]$Id
+    )
+
+    $TraceId = $Id
+    $Date = Get-Date
+
+    if ($PSCmdlet.ParameterSetName -eq 'ById')
+    {
+        $Query = "
+            SELECT * FROM Traces
+            WHERE Id = '$TraceId'
+        "
+    }
+    else
+    {
+        $Query = "SELECT * FROM Traces"
+    }
+
+    Invoke-SqliteQuery -Query $Query
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function Trace-RestMethod
 {
     <#
@@ -278,8 +363,9 @@ function Trace-SutCommand
     $ProxyModuleName = "PastaTracingProxy"
     Remove-Module $ProxyModuleName -ErrorAction SilentlyContinue
 
-    switch ($PSCmdlet.ParameterSetName) {
-    'ByModule'
+    switch ($PSCmdlet.ParameterSetName)
+    {
+        'ByModule'
         {
             [psmoduleinfo]$Module = Get-Module $Module
             [System.Management.Automation.CommandInfo[]]$Commands = $Module.ExportedCommands.Values | 
@@ -335,10 +421,10 @@ function Trace-SutCommand
     foreach ($ProxiedCommand in $Commands)
     {
         $FunctionBody = [scriptblock]::Create((
-            $FunctionBody.ToString() `
-                -replace '\$ProxiedCommandModule', $ProxiedCommand.ModuleName `
-                -replace '\$ProxiedCommandName', $ProxiedCommand.Name
-        ))
+                $FunctionBody.ToString() `
+                    -replace '\$ProxiedCommandModule', $ProxiedCommand.ModuleName `
+                    -replace '\$ProxiedCommandName', $ProxiedCommand.Name
+            ))
 
         $null = $StubDef.AppendLine(
             (New-StubCommand -CommandInfo $ProxiedCommand -FunctionBody $FunctionBody)
@@ -371,7 +457,8 @@ function Trace-SutCommand
     $ExportedCommandNames |
         foreach {Write-Verbose "Tracing command $_"}
     
-    if ($ExportedCommandNames) {
+    if ($ExportedCommandNames)
+    {
         Write-Verbose "SutCommand tracing on" -Verbose
     }
     
