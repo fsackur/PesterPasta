@@ -1,22 +1,34 @@
-function Add-GigoTraceEntry
-{
+function Add-GigoTraceEntry {
     [CmdletBinding()]
     [OutputType([guid])]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
-        [guid]$TraceId
+        [guid]$TraceId,
+
+        [string]$Command,
+
+        [System.Collections.IDictionary]$BoundParameters,
+
+        [object]$Result,
+
+        [object]$Error
     )
 
-    
-    $TraceEntryId = New-Guid
-    $Command = 'Get-Stuff'
-    $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
-    $Result = "Massive success" | ConvertTo-Json -Depth 3 -Compress
-    $Date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    $Ticks = (Get-Date).Ticks
+    $SqlSplat = [ordered]@{
+        Id              = New-Guid
+        TraceId         = $TraceId
+        Command         = $Command
+        BoundParameters = $BoundParameters  | ConvertTo-Json -Depth 3 -Compress
+        Result          = $Result           | ConvertTo-Json -Depth 3 -Compress
+        Error           = $Error            | ConvertTo-Json -Depth 3 -Compress
+        Time            = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        Ticks           = (Get-Date).Ticks
+    }
 
-    Invoke-SqliteQuery -Query "
-        INSERT INTO TraceEntries (Id, TraceId, Command, BoundParameters, Result, Error, Time, Ticks)
-        VALUES ('$TraceEntryId', '$TraceId', '$Command', '$BoundParameters', '$Result', '$Error', '$Date', '$Ticks')
+    $Query = "
+        INSERT INTO TraceEntries ($($SqlSplat.Keys -join ', '))
+        VALUES ('$($SqlSplat.Values -join "', '")')
     "
+
+    Invoke-SqliteQuery -Query $Query
 }

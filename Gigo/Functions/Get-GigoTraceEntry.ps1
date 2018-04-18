@@ -23,11 +23,21 @@ function Get-GigoTraceEntry
     {
         $Query = "
             SELECT * FROM TraceEntries
-            WHERE Id = '$TraceEntryId'    
+            WHERE Id = '$TraceEntryId'
+            ORDER BY TraceId, TICKS
         "
     }
 
-    $Result = Invoke-SqliteQuery -Query $Query
+    $Result = Invoke-SqliteQuery -Query $Query | select (
+        'Id',
+        'TraceId',
+        'Command',
+        @{Name='BoundParameters';   Expression={$_.BoundParameters  | ConvertFrom-Json}},
+        @{Name='Result';            Expression={$_.Result           | ConvertFrom-Json}},
+        @{Name='Error';             Expression={$_.Error            | ConvertFrom-Json}},
+        @{Name='Time';              Expression={Get-Date $_.Time}},
+        'Ticks'
+    )
     @($Result).ForEach({$_.PSTypeNames.Insert(0, 'Dusty.GigoTraceEntry')})
-    return $Result | sort TraceId, Ticks
+    return $Result
 }

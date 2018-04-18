@@ -22,7 +22,13 @@ function Get-GigoTrace
         $Query = "SELECT * FROM Traces"
     }
 
-    $Result = Invoke-SqliteQuery -Query $Query
+    $Result = Invoke-SqliteQuery -Query $Query | select (
+        'Id',
+        'Command',
+        @{Name='BoundParameters';   Expression={$_.BoundParameters | ConvertFrom-Json}},
+        @{Name='StartTime';         Expression={Get-Date $_.StartTime}},
+        @{Name='EndTime';           Expression={Get-Date $_.EndTime}}
+    )
     @($Result).ForEach({$_.PSTypeNames.Insert(0, 'Dusty.GigoTrace')})
     return $Result
 }
