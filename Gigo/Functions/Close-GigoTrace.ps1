@@ -8,7 +8,7 @@ function Close-GigoTrace
     )
 
     $TraceId = $Id
-    $Date = Get-Date
+    $Date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
     Invoke-SqliteQuery -Query "
         UPDATE Traces

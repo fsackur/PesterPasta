@@ -7,7 +7,7 @@ function Open-GigoTrace
     $TraceId = New-Guid
     $Command = 'Get-Stuff'
     $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
-    $Date = Get-Date
+    $Date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
     Invoke-SqliteQuery -Query "
         INSERT INTO Traces (Id, Command, BoundParameters, StartTime)

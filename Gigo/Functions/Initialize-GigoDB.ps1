@@ -19,7 +19,6 @@ if (-not ($Connection.ConnectionString -match 'Data Source=(?<DataSource>.+?);')
     throw "Failed to create SQLite data source"
 }
 $PSDefaultParameterValues.'Invoke-SqliteQuery:SQLiteConnection' = $Connection
-$PSDefaultParameterValues.'Get-Date:Format' = 'yyyy-MM-dd HH:mm:ss'
 
 $Query = "
     CREATE TABLE Traces (
@@ -45,6 +44,7 @@ $Query = "
         Result TEXT,
         Error TEXT,
         Time DATETIME,
+        Ticks BIGINT,
         FOREIGN KEY (TraceId) REFERENCES Traces(Id)
     )"
 Invoke-SqliteQuery -Query $Query

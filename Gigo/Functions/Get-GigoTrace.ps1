@@ -8,7 +8,7 @@ function Get-GigoTrace
     )
 
     $TraceId = $Id
-    $Date = Get-Date
+    $Date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
     if ($PSCmdlet.ParameterSetName -eq 'ById')
     {

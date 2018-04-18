@@ -12,10 +12,11 @@ function Add-GigoTraceEntry
     $Command = 'Get-Stuff'
     $BoundParameters = @{Stuff = 22} | ConvertTo-Json -Depth 3 -Compress
     $Result = "Massive success" | ConvertTo-Json -Depth 3 -Compress
-    $Date = Get-Date
+    $Date = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $Ticks = (Get-Date).Ticks
 
     Invoke-SqliteQuery -Query "
-        INSERT INTO TraceEntries (Id, TraceId, Command, BoundParameters, Result, Error, Time)
-        VALUES ('$TraceEntryId', '$TraceId', '$Command', '$BoundParameters', '$Result', '$Error', '$Date')
+        INSERT INTO TraceEntries (Id, TraceId, Command, BoundParameters, Result, Error, Time, Ticks)
+        VALUES ('$TraceEntryId', '$TraceId', '$Command', '$BoundParameters', '$Result', '$Error', '$Date', '$Ticks')
     "
 }

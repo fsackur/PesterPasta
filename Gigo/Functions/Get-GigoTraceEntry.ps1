@@ -29,5 +29,5 @@ function Get-GigoTraceEntry
 
     $Result = Invoke-SqliteQuery -Query $Query
     @($Result).ForEach({$_.PSTypeNames.Insert(0, 'Dusty.GigoTraceEntry')})
-    return $Result
+    return $Result | sort TraceId, Ticks
 }
