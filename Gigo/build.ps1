@@ -1,7 +1,8 @@
 
 
 $Dependencies = (
-    'PSSQLite'
+    'PSSQLite',
+    'MetaProgramming'
 )
 
 $PackagesPath = Join-Path $PSScriptRoot 'Packages'
@@ -13,7 +14,7 @@ if (-not (Test-Path $PackagesPath))
 foreach ($Dependency in $Dependencies)
 {
     if (-not (Test-Path (Join-Path $PackagesPath $Dependency))) {
-        Save-Module PSSQLite -Path $PackagesPath
+        Save-Module $Dependency -Path $PackagesPath
     }
 }
 
