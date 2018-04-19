@@ -1,12 +1,42 @@
 function New-GigoTraceConfig {
+    [CmdletBinding(DefaultParameterSetName = 'ByModule')]
+    [OutputType()]
     param (
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByModule', Position = 0)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByModuleAsPSObject', Position = 0)]
         [string]$Module,
 
-        [switch]$AsJson
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByCommand')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByCommandAsPSObject')]
+        [string]$Command,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByModuleAsPSObject')]
+        [Parameter(Mandatory = $true, ParameterSetName = 'ByCommandAsPSObject')]
+        [switch]$AsPSObject
     )
 
-    $Commands = Get-Command -Module $Module
-    
+    if ($PSCmdlet.ParameterSetName -match 'ByModule')
+    {
+        $Commands = Get-Command -Module $Module
+        $ParameterSets = @()
+        foreach ($Command in $Commands)
+        {
+            $ParameterSets += New-GigoTraceConfig -Command $Command -AsPSObject
+        }
+        if ($PSCmdlet.ParameterSetName -notmatch 'AsPSObject')
+        {
+            return ($ParameterSets | ConvertTo-Json -Depth 4) -replace '\\u0027', "'"
+        }
+        else
+        {
+            return $ParameterSets
+        }
+    }
+    else
+    {
+        [System.Management.Automation.CommandInfo]$Command = Get-Command $Command
+    }
+
     $CommonParameters = (
         'Verbose',
         'Debug',
@@ -21,81 +51,75 @@ function New-GigoTraceConfig {
         'PipelineVariable'
     )
 
-    $Output = @()
+    $ParameterSets = @()
 
-    foreach ($Command in $Commands)
+    foreach ($ParameterSet in $Command.ParameterSets)
     {
-        $ParameterSets = @()
+        $Parameters = @()
 
-        foreach ($ParameterSet in $Command.ParameterSets)
+        foreach ($Parameter in ($ParameterSet.Parameters | where {$_.Name -notin $CommonParameters}))
         {
-            $Parameters = @()
+            $CookedAttributes = @()
+            
+            foreach ($Attribute in $Parameter.Attributes) {
 
-            foreach ($Parameter in ($ParameterSet.Parameters | where {$_.Name -notin $CommonParameters}))
-            {
-                $CookedAttributes = @()
-                
-                foreach ($Attribute in $Parameter.Attributes) {
-
-                    #Subset of possible parameter validation attributes (e.g. disregard ValidateDrive or ValidateCount)
-                    if ($Attribute -isnot [System.Management.Automation.ValidateEnumeratedArgumentsAttribute])
-                    {
-                        continue
-                    }
-
-                    $TypeName = $Attribute.TypeId.Name -replace 'Attribute$'
-
-                    $ValidArg = switch ($TypeName)
-                    {
-                        'ValidateLength'    {$Attribute.MinLength, $Attribute.MaxLength}
-                        'ValidateRange'     {$Attribute.MinRange, $Attribute.MaxRange}
-                        'ValidatePattern'   {$Attribute.RegexPattern}
-                        'ValidateScript'    {$Attribute.ScriptBlock}
-                        'ValidateSet'       {$Attribute.ValidValues}
-                    }
-
-                    $CookedAttribute = New-Object psobject -Property @{
-                        TypeName = $TypeName
-                        ValidArg = $ValidArg
-                    }
-                    $CookedAttribute | Add-Member ScriptMethod -Name ToString -Force -Value {
-                        return "[{0}({1})]" -f (
-                            $this.TypeName,
-                            $(switch -Regex ($this.TypeName) {
-                                'Set'           {"'$($this.ValidArg -join "', '")'"}
-                                'Length|Range'  {"$($this.ValidArg -join ', ')"}
-                                'Pattern'       {"'$($this.ValidArg)'"}
-                                'Script'        {"{$($this.ValidArg)}"}
-                            })
-                        )
-                    }
-                    $CookedAttributes += $CookedAttribute
+                #Subset of possible parameter validation attributes (e.g. disregard ValidateDrive or ValidateCount)
+                if ($Attribute -isnot [System.Management.Automation.ValidateEnumeratedArgumentsAttribute])
+                {
+                    continue
                 }
 
-                $Parameters += New-Object psobject -Property @{
-                    Name               = $Parameter.Name
-                    ParameterType      = $Parameter.ParameterType.FullName
-                    IsMandatory        = $Parameter.IsMandatory
-                    ValidateAttributes = @($CookedAttributes)
+                $TypeName = $Attribute.TypeId.Name -replace 'Attribute$'
+
+                $ValidArg = switch ($TypeName)
+                {
+                    'ValidateLength'    {$Attribute.MinLength, $Attribute.MaxLength}
+                    'ValidateRange'     {$Attribute.MinRange, $Attribute.MaxRange}
+                    'ValidatePattern'   {$Attribute.RegexPattern}
+                    'ValidateScript'    {$Attribute.ScriptBlock}
+                    'ValidateSet'       {$Attribute.ValidValues}
                 }
+
+                $CookedAttribute = New-Object psobject -Property @{
+                    TypeName = $TypeName
+                    ValidArg = $ValidArg
+                }
+                $CookedAttribute | Add-Member ScriptMethod -Name ToString -Force -Value {
+                    return "[{0}({1})]" -f (
+                        $this.TypeName,
+                        $(switch -Regex ($this.TypeName) {
+                            'Set'           {"'$($this.ValidArg -join "', '")'"}
+                            'Length|Range'  {"$($this.ValidArg -join ', ')"}
+                            'Pattern'       {"'$($this.ValidArg)'"}
+                            'Script'        {"{$($this.ValidArg)}"}
+                        })
+                    )
+                }
+                $CookedAttributes += $CookedAttribute
             }
 
-            $ParameterSets += New-Object psobject -Property ([ordered]@{
-                Command      = $Command.Name
-                ParameterSet = $ParameterSet.Name
-                Parameters   = @($Parameters)
-            })
+            $Parameters += New-Object psobject -Property @{
+                Name               = $Parameter.Name
+                ParameterType      = $Parameter.ParameterType.FullName
+                IsMandatory        = $Parameter.IsMandatory
+                ValidateAttributes = @($CookedAttributes)
+            }
         }
 
-        $Output += $ParameterSets
+        $ParameterSets += New-Object psobject -Property ([ordered]@{
+            Command      = $Command.Name
+            ParameterSet = $ParameterSet.Name
+            Parameters   = @($Parameters)
+        })
     }
+
     
-    if ($AsJson)
+    if ($PSCmdlet.ParameterSetName -notmatch 'AsPSObject')
     {
-        ($Output | ConvertTo-Json -Depth 4) -replace '\\u0027', "'"
+        return ($ParameterSets | ConvertTo-Json -Depth 4) -replace '\\u0027', "'"
     }
     else
     {
-        $Output
+        return $ParameterSets
     }
 }
