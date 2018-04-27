@@ -2,7 +2,8 @@
 
 $Dependencies = (
     'PSSQLite',
-    'MetaProgramming'
+    'MetaProgramming',
+    'PowerShell-Beautifier'
 )
 
 $PackagesPath = Join-Path $PSScriptRoot 'Packages'
