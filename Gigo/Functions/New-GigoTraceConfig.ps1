@@ -1,7 +1,7 @@
 function New-GigoTraceConfig {
     [CmdletBinding(DefaultParameterSetName = 'ByModule')]
-    [OutputType([string], ParameterSetName = 'ByModule', 'ByCommand')]
-    [OutputType([psobject], ParameterSetName = 'ByModuleAsPSObject', 'ByCommandAsPSObject')]
+    [OutputType([string], ParameterSetName = ('ByModule', 'ByCommand'))]
+    [OutputType([psobject], ParameterSetName = ('ByModuleAsPSObject', 'ByCommandAsPSObject'))]
     param (
         [Parameter(Mandatory = $true, ParameterSetName = 'ByModule', Position = 0)]
         [Parameter(Mandatory = $true, ParameterSetName = 'ByModuleAsPSObject', Position = 0)]
